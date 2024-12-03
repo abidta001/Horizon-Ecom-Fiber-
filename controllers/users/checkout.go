@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"horizon/config"
 	"log"
-	"strconv"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -21,19 +20,10 @@ func Checkout(c *fiber.Ctx) error {
 	addressID := c.Query("address_id")
 	couponCode := c.Query("coupon_code")
 	paymentMethod := c.Query("payment_method")
-	offerDiscount := c.Query("offer_discount")
+	offerID := c.Query("offer_id")
 
 	if addressID == "" || paymentMethod == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Missing required parameters"})
-	}
-
-	var offerDiscountFloat float64
-	if offerDiscount != "" {
-		od, err := strconv.ParseFloat(offerDiscount, 64)
-		if err != nil {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid offer discount value"})
-		}
-		offerDiscountFloat = od
 	}
 
 	var address struct {
@@ -109,6 +99,7 @@ func Checkout(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Cart is empty"})
 	}
 
+	// Apply Coupon Discount
 	var couponDiscountFloat float64
 	if couponCode != "" && paymentMethod != "cod" {
 		var discountPercentage, maxDiscountAmount, minOrderAmount float64
@@ -141,12 +132,35 @@ func Checkout(c *fiber.Ctx) error {
 		orderTotal -= couponDiscountFloat
 	}
 
-	if orderTotal < offerDiscountFloat {
-		tx.Rollback()
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Offer discount exceeds order total"})
-	}
-	orderTotal -= offerDiscountFloat
+	// Apply Offer Discount
+	var offerDiscountFloat float64
+	if offerID != "" {
+		var discountPercentage float64
+		var productID int
+		offerQuery := `
+			SELECT discount_percentage, product_id
+			FROM offers
+			WHERE id = $1 AND CURRENT_TIMESTAMP BETWEEN start_date AND end_date
+		`
+		err := config.DB.QueryRow(offerQuery, offerID).Scan(&discountPercentage, &productID)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid or expired offer"})
+		}
 
+		for _, item := range cartItems {
+			if item.ProductID == productID {
+				offerDiscountFloat += (float64(item.Quantity) * item.Price * discountPercentage) / 100
+			}
+		}
+		orderTotal -= offerDiscountFloat
+	}
+
+	// Prevent invalid discounts
+	if orderTotal < 0 {
+		orderTotal = 0
+	}
+
+	// Determine Payment and Order Status
 	var paymentStatus, status string
 	if paymentMethod == "cod" {
 		if orderTotal > 1000 {
@@ -175,6 +189,7 @@ func Checkout(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to create order"})
 	}
 
+	// Insert Order Items
 	for _, item := range cartItems {
 		subtotal := item.Price * float64(item.Quantity)
 		_, err := tx.Exec(`
@@ -188,18 +203,20 @@ func Checkout(c *fiber.Ctx) error {
 		}
 	}
 
+	// Clear Cart
 	_, err = tx.Exec(`DELETE FROM cart WHERE user_id = $1`, userID)
 	if err != nil {
 		tx.Rollback()
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to clear cart"})
 	}
 
+	// Update Coupon Usage
 	if couponCode != "" {
 		updateCouponQuery := `
-		UPDATE coupons
-		SET used_count = used_count + 1
-		WHERE code = $1
-	`
+			UPDATE coupons
+			SET used_count = used_count + 1
+			WHERE code = $1
+		`
 		_, err = tx.Exec(updateCouponQuery, couponCode)
 		if err != nil {
 			tx.Rollback()
@@ -211,6 +228,7 @@ func Checkout(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to finalize transaction"})
 	}
 
+	// Handle PayPal Payments
 	if paymentMethod == "paypal" {
 		paypalClient := config.GetPayPalClient()
 		fixedExchangeRate := 0.012
@@ -228,27 +246,14 @@ func Checkout(c *fiber.Ctx) error {
 				},
 			},
 			nil,
-			&paypal.ApplicationContext{
-				ReturnURL: "https://horizonweb.me/paypal/success",
-				CancelURL: "https://horizonweb.me/paypal/cancel",
-			},
+			nil,
 		)
 		if err != nil {
-			log.Printf("PayPal CreateOrder error: %v\n", err)
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to create PayPal order"})
+			log.Printf("Failed to create PayPal order: %v", err)
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to process PayPal payment"})
 		}
-
-		for _, link := range order.Links {
-			if link.Rel == "approve" {
-				return c.JSON(fiber.Map{"payment_redirect_url": link.Href})
-			}
-		}
-
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "PayPal approval link not found"})
+		return c.JSON(order)
 	}
 
-	return c.Status(fiber.StatusOK).JSON(fiber.Map{
-		"message":  "Order placed successfully",
-		"order_id": uniqueOrderID,
-	})
+	return c.Status(fiber.StatusCreated).JSON(fiber.Map{"message": "Order created successfully", "order_id": orderID})
 }
