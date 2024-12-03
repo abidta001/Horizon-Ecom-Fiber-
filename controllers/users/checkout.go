@@ -19,7 +19,6 @@ func Checkout(c *fiber.Ctx) error {
 	addressID := c.Query("address_id")
 	couponCode := c.Query("coupon_code")
 	paymentMethod := c.Query("payment_method")
-	offerID := c.Query("offer_id")
 
 	if addressID == "" || paymentMethod == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Missing required parameters"})
@@ -98,7 +97,6 @@ func Checkout(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Cart is empty"})
 	}
 
-	// Apply Coupon Discount
 	var couponDiscountFloat float64
 	if couponCode != "" && paymentMethod != "cod" {
 		var discountPercentage, maxDiscountAmount, minOrderAmount float64
@@ -131,35 +129,31 @@ func Checkout(c *fiber.Ctx) error {
 		orderTotal -= couponDiscountFloat
 	}
 
-	// Apply Offer Discount
 	var offerDiscountFloat float64
-	if offerID != "" {
-		var discountPercentage float64
-		var productID int
-		offerQuery := `
-			SELECT discount_percentage, product_id
-			FROM offers
-			WHERE id = $1 AND CURRENT_TIMESTAMP BETWEEN start_date AND end_date
-		`
-		err := config.DB.QueryRow(offerQuery, offerID).Scan(&discountPercentage, &productID)
-		if err != nil {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid or expired offer"})
-		}
 
-		for _, item := range cartItems {
-			if item.ProductID == productID {
-				offerDiscountFloat += (float64(item.Quantity) * item.Price * discountPercentage) / 100
-			}
+	for _, item := range cartItems {
+		var discountPercentage float64
+
+		offerQuery := `
+    SELECT discount_percentage
+    FROM offers
+    WHERE product_id = $1 AND CURRENT_TIMESTAMP BETWEEN start_date AND end_date
+	`
+		err := config.DB.QueryRow(offerQuery, item.ProductID).Scan(&discountPercentage)
+		if err == nil {
+			offerDiscountFloat += (float64(item.Quantity) * item.Price * discountPercentage) / 100
 		}
-		orderTotal -= offerDiscountFloat
+		if err != nil && err.Error() != "no rows in result set" {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to fetch offer data"})
+		}
 	}
 
-	// Prevent invalid discounts
+	orderTotal -= offerDiscountFloat
+
 	if orderTotal < 0 {
 		orderTotal = 0
 	}
 
-	// Determine Payment and Order Status
 	var paymentStatus, status string
 	if paymentMethod == "cod" {
 		if orderTotal > 1000 {
@@ -176,24 +170,23 @@ func Checkout(c *fiber.Ctx) error {
 	uniqueOrderID := fmt.Sprintf("ORD-%d", time.Now().UnixNano())
 	var orderID int
 	createOrderQuery := `
-		INSERT INTO orders 
-		(order_id, user_id, total_amount, coupon_discount, offer_discount, payment_method, payment_status, status, address_line, city, zip_code) 
-		VALUES 
-		($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) 
-		RETURNING id
-	`
+	INSERT INTO orders 
+	(order_id, user_id, total_amount, coupon_discount, offer_discount, payment_method, payment_status, status, address_line, city, zip_code) 
+	VALUES 
+	($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) 
+	RETURNING id
+`
 	err = tx.QueryRow(createOrderQuery, uniqueOrderID, userID, orderTotal, couponDiscountFloat, offerDiscountFloat, paymentMethod, paymentStatus, status, address.AddressLine, address.City, address.ZipCode).Scan(&orderID)
 	if err != nil {
 		tx.Rollback()
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to create order"})
 	}
 
-	// Insert Order Items
 	for _, item := range cartItems {
 		subtotal := item.Price * float64(item.Quantity)
 		_, err := tx.Exec(`
-			INSERT INTO order_items (order_id, product_id, quantity, price, subtotal)
-			VALUES ($1, $2, $3, $4, $5)`,
+		INSERT INTO order_items (order_id, product_id, quantity, price, subtotal)
+		VALUES ($1, $2, $3, $4, $5)`,
 			orderID, item.ProductID, item.Quantity, item.Price, subtotal,
 		)
 		if err != nil {
@@ -202,20 +195,18 @@ func Checkout(c *fiber.Ctx) error {
 		}
 	}
 
-	// Clear Cart
 	_, err = tx.Exec(`DELETE FROM cart WHERE user_id = $1`, userID)
 	if err != nil {
 		tx.Rollback()
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to clear cart"})
 	}
 
-	// Update Coupon Usage
 	if couponCode != "" {
 		updateCouponQuery := `
-			UPDATE coupons
-			SET used_count = used_count + 1
-			WHERE code = $1
-		`
+		UPDATE coupons
+		SET used_count = used_count + 1
+		WHERE code = $1
+	`
 		_, err = tx.Exec(updateCouponQuery, couponCode)
 		if err != nil {
 			tx.Rollback()
