@@ -228,7 +228,6 @@ func Checkout(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to finalize transaction"})
 	}
 
-	// Handle PayPal Payments
 	if paymentMethod == "paypal" {
 		paypalClient := config.GetPayPalClient()
 		fixedExchangeRate := 0.012
@@ -246,14 +245,27 @@ func Checkout(c *fiber.Ctx) error {
 				},
 			},
 			nil,
-			nil,
+			&paypal.ApplicationContext{
+				ReturnURL: "https://horizonweb.me/paypal/success",
+				CancelURL: "https://horizonweb.me/paypal/cancel",
+			},
 		)
 		if err != nil {
-			log.Printf("Failed to create PayPal order: %v", err)
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to process PayPal payment"})
+			log.Printf("PayPal CreateOrder error: %v\n", err)
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to create PayPal order"})
 		}
-		return c.JSON(order)
+
+		for _, link := range order.Links {
+			if link.Rel == "approve" {
+				return c.JSON(fiber.Map{"payment_redirect_url": link.Href})
+			}
+		}
+
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "PayPal approval link not found"})
 	}
 
-	return c.Status(fiber.StatusCreated).JSON(fiber.Map{"message": "Order created successfully", "order_id": orderID})
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"message":  "Order placed successfully",
+		"order_id": uniqueOrderID,
+	})
 }
