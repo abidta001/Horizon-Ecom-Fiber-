@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"horizon/config"
-	"log"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -251,21 +250,12 @@ func Checkout(c *fiber.Ctx) error {
 			},
 		)
 		if err != nil {
-			log.Printf("PayPal CreateOrder error: %v\n", err)
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to create PayPal order"})
 		}
-
-		for _, link := range order.Links {
-			if link.Rel == "approve" {
-				return c.JSON(fiber.Map{"payment_redirect_url": link.Href})
-			}
+		if len(order.Links) > 1 {
+			return c.JSON(fiber.Map{"url": order.Links[1].Href})
 		}
-
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "PayPal approval link not found"})
 	}
 
-	return c.Status(fiber.StatusOK).JSON(fiber.Map{
-		"message":  "Order placed successfully",
-		"order_id": uniqueOrderID,
-	})
+	return c.JSON(fiber.Map{"message": "Order placed successfully", "order_id": uniqueOrderID, "total_amount": orderTotal})
 }
