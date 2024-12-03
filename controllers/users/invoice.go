@@ -16,8 +16,8 @@ func fetchInvoiceData(orderID int) (models.Invoice, error) {
 			o.id AS invoice_id, 
 			u.name AS user_name, 
 			u.email AS user_email,
-			concat(a.address_line ,', ',a.city ,' ',a.zip_code )AS user_address,   -- Get address line from address table
-			u.phone AS user_phone,     -- Get user phone from users table
+			concat(a.address_line ,', ',a.city ,' ',a.zip_code )AS user_address,   
+			u.phone AS user_phone,     
 			o.order_date, 
 			o.payment_method, 
 			o.total_amount, 
@@ -26,12 +26,11 @@ func fetchInvoiceData(orderID int) (models.Invoice, error) {
 			(o.offer_discount + o.coupon_discount) AS total_discount,
 			oi.quantity, 
 			p.name AS product_name, 
-			p.description AS product_desc,
 			oi.price AS price_per_unit, 
 			oi.subtotal
 		FROM orders o
 		JOIN users u ON o.user_id = u.id
-		JOIN addresses a ON u.id = a.user_id  -- Join the address table with users table
+		JOIN addresses a ON u.id = a.user_id  
 		JOIN order_items oi ON oi.order_id = o.id
 		JOIN products p ON oi.product_id = p.id
 		WHERE o.id = $1
@@ -54,7 +53,7 @@ func fetchInvoiceData(orderID int) (models.Invoice, error) {
 			&invoice.UserAddress, &invoice.UserPhoneNumber, &invoice.OrderDate,
 			&invoice.PaymentMethod, &invoice.TotalAmount, &invoice.OfferDiscount,
 			&invoice.CouponDiscount, &invoice.TotalDiscount, &item.Quantity, &item.ProductName,
-			&item.ProductDesc, &item.PricePerUnit, &item.Subtotal)
+			&item.PricePerUnit, &item.Subtotal)
 		if err != nil {
 			return models.Invoice{}, err
 		}
@@ -65,11 +64,9 @@ func fetchInvoiceData(orderID int) (models.Invoice, error) {
 	}
 
 	invoice.Subtotal = totalInvoiceSubtotal
-
 	invoice.Items = items
 	return invoice, nil
 }
-
 func generateInvoicePDF(invoice models.Invoice) error {
 	pdf := gofpdf.New("P", "mm", "A4", "")
 	pdf.AddPage()
@@ -103,8 +100,7 @@ func generateInvoicePDF(invoice models.Invoice) error {
 	pdf.Ln(15)
 
 	pdf.SetFont("Arial", "B", 10)
-	pdf.Cell(40, 10, "Product Name")
-	pdf.Cell(40, 10, "Description")
+	pdf.Cell(80, 10, "Product Name")
 	pdf.Cell(25, 10, "Quantity")
 	pdf.Cell(25, 10, "Price")
 	pdf.Cell(25, 10, "Subtotal")
@@ -113,8 +109,7 @@ func generateInvoicePDF(invoice models.Invoice) error {
 
 	pdf.SetFont("Arial", "", 10)
 	for _, item := range invoice.Items {
-		pdf.Cell(40, 10, item.ProductName)
-		pdf.Cell(40, 10, item.ProductDesc)
+		pdf.Cell(80, 10, item.ProductName)
 		pdf.Cell(25, 10, fmt.Sprintf("%d", item.Quantity))
 		pdf.Cell(25, 10, fmt.Sprintf("%.2f", item.PricePerUnit))
 		pdf.Cell(25, 10, fmt.Sprintf("%.2f", item.Subtotal))
@@ -137,9 +132,10 @@ func generateInvoicePDF(invoice models.Invoice) error {
 	pdf.Ln(50)
 	pdf.SetFont("Arial", "I", 8)
 	pdf.SetX(55)
-	pdf.MultiCell(100, 5, "horizonecom@gmail.com  |  www.horizonecom.tech.com", "", "C", false)
+	pdf.MultiCell(100, 5, "horizonecom@gmail.com  |  www.horizonweb.me", "", "C", false)
 	return pdf.OutputFileAndClose("invoice.pdf")
 }
+
 func GetInvoice(c *fiber.Ctx) error {
 	orderID := c.Params("orderID")
 	if orderID == "" {

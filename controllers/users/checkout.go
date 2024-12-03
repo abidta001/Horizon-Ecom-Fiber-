@@ -229,8 +229,8 @@ func Checkout(c *fiber.Ctx) error {
 			},
 			nil,
 			&paypal.ApplicationContext{
-				ReturnURL: "http://localhost:3000/paypal/success",
-				CancelURL: "http://localhost:3000/paypal/cancel",
+				ReturnURL: "https://horizonweb.me/paypal/success",
+				CancelURL: "https://horizonweb.me/paypal/cancel",
 			},
 		)
 		if err != nil {
