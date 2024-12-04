@@ -114,7 +114,7 @@ func AdminChangeOrderStatus(c *fiber.Ctx) error {
 		"Pending":   true,
 		"Shipped":   true,
 		"Delivered": true,
-		"Canceled":  true,
+		"Cancelled": true,
 		"Returned":  true,
 	}
 	if !validStatuses[statusUpdate.Status] {
