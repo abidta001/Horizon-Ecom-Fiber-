@@ -1,16 +1,14 @@
 package models
 
 type SalesItem struct {
-	ItemNumber      int     `db:"item_number"`
-	ItemName        string  `db:"item_name"`
-	ItemDescription string  `db:"item_description"`
-	ProductID       int     `db:"product_id"`
-	Quantity        int     `db:"quantity"`
-	Amount          float64 `db:"amount"`
-	Offer           float64 `db:"offer_discount"`
-	Coupon          float64 `db:"coupon_discount"`
-	TotalDiscount   float64 `db:"total_discount"`
-	Total           float64 `db:"total"`
+	ProductID           int     `db:"product_id"`
+	ProductName         string  `db:"product_name"`
+	ProductDescription  string  `db:"product_description"`
+	TotalQuantity       int     `db:"total_quantity"`
+	TotalAmount         float64 `db:"total_amount"`
+	TotalOfferDiscount  float64 `db:"total_offer_discount"`
+	TotalCouponDiscount float64 `db:"total_coupon_discount"`
+	TotalRevenue        float64 `db:"total_revenue"`
 }
 
 type SalesReport struct {

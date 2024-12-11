@@ -144,6 +144,7 @@ func Checkout(c *fiber.Ctx) error {
 			offerDiscountFloat += (float64(item.Quantity) * item.Price * discountPercentage) / 100
 		}
 		if err != nil && err.Error() != "no rows in result set" {
+			fmt.Println(err)
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to fetch offer data"})
 		}
 	}

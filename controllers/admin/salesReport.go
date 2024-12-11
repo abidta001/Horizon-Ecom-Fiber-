@@ -15,20 +15,20 @@ import (
 func fetchSalesData(startDate, endDate time.Time) ([]models.SalesItem, int, float64, float64, error) {
 	query := `
 		SELECT 
-			oi.id AS item_number,
-			p.name AS item_name,
-			p.description AS item_description,
-			oi.quantity,
-			oi.subtotal AS amount,
-			o.offer_discount,
-			o.coupon_discount,
-			(o.offer_discount + o.coupon_discount) AS total_discount,
-			(oi.subtotal - o.offer_discount - o.coupon_discount) AS total
+			p.id AS product_id,
+			p.name AS product_name,
+			p.description AS product_description,
+			SUM(oi.quantity) AS total_quantity,
+			SUM(oi.subtotal) AS total_amount,
+			SUM(o.offer_discount) AS total_offer_discount,
+			SUM(o.coupon_discount) AS total_coupon_discount,
+			SUM(oi.subtotal - o.offer_discount - o.coupon_discount) AS total_revenue
 		FROM order_items oi
 		JOIN orders o ON oi.order_id = o.id
 		JOIN products p ON oi.product_id = p.id
 		WHERE o.order_date BETWEEN $1 AND $2
 		  AND o.status IN ('Delivered', 'Returned', 'Canceled')
+		GROUP BY p.id, p.name, p.description
 	`
 	rows, err := config.DB.Queryx(query, startDate, endDate)
 	if err != nil {
@@ -47,9 +47,9 @@ func fetchSalesData(startDate, endDate time.Time) ([]models.SalesItem, int, floa
 			return nil, 0, 0, 0, err
 		}
 
-		totalSalesCount += item.Quantity
-		totalRevenue += item.Total
-		totalDiscount += item.Offer + item.Coupon
+		totalSalesCount += item.TotalQuantity
+		totalRevenue += item.TotalRevenue
+		totalDiscount += item.TotalOfferDiscount + item.TotalCouponDiscount
 
 		items = append(items, item)
 	}
@@ -151,13 +151,13 @@ func generateSalesReportPDF(report models.SalesReport) error {
 
 	for _, item := range report.Items {
 		pdf.SetFont("Arial", "", 10)
-		pdf.Cell(20, 10, fmt.Sprintf("%d", item.ItemNumber)) 
-		pdf.Cell(50, 10, item.ItemName)                      
-		pdf.Cell(25, 10, fmt.Sprintf("%d", item.Quantity))  
-		pdf.Cell(25, 10, fmt.Sprintf("%.2f", item.Amount))   
-		pdf.Cell(25, 10, fmt.Sprintf("%.2f", item.Offer))    
-		pdf.Cell(25, 10, fmt.Sprintf("%.2f", item.Coupon))  
-		pdf.Cell(25, 10, fmt.Sprintf("%.2f", item.Total))   
+		pdf.Cell(20, 10, fmt.Sprintf("%d", item.ProductID))
+		pdf.Cell(50, 10, item.ProductName)
+		pdf.Cell(25, 10, fmt.Sprintf("%d", item.TotalQuantity))
+		pdf.Cell(25, 10, fmt.Sprintf("%.2f", item.TotalAmount))
+		pdf.Cell(25, 10, fmt.Sprintf("%.2f", item.TotalOfferDiscount))
+		pdf.Cell(25, 10, fmt.Sprintf("%.2f", item.TotalCouponDiscount))
+		pdf.Cell(25, 10, fmt.Sprintf("%.2f", item.TotalRevenue))
 		pdf.Ln(6)
 	}
 
@@ -194,11 +194,12 @@ func generateSalesReportExcel(report models.SalesReport) error {
 	f.SetCellValue(sheetName, "D6", "Amount")
 
 	row := 7
+
 	for _, item := range report.Items {
-		f.SetCellValue(sheetName, fmt.Sprintf("A%d", row), item.ItemNumber)
-		f.SetCellValue(sheetName, fmt.Sprintf("B%d", row), item.ItemName)
-		f.SetCellValue(sheetName, fmt.Sprintf("C%d", row), item.Quantity)
-		f.SetCellValue(sheetName, fmt.Sprintf("D%d", row), item.Total)
+		f.SetCellValue(sheetName, fmt.Sprintf("A%d", row), item.ProductID)
+		f.SetCellValue(sheetName, fmt.Sprintf("B%d", row), item.ProductName)
+		f.SetCellValue(sheetName, fmt.Sprintf("C%d", row), item.TotalQuantity)
+		f.SetCellValue(sheetName, fmt.Sprintf("D%d", row), item.TotalRevenue)
 		row++
 	}
 

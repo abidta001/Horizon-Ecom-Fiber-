@@ -154,7 +154,7 @@ func UpdateProductStock(c *fiber.Ctx) error {
 		return c.Status(http.StatusNotFound).JSON(fiber.Map{"error": "Product not found or unavailable"})
 	}
 
-	updateQuery := `UPDATE products SET stock = stock + $1 WHERE id = $2 AND deleted=false`
+	updateQuery := `UPDATE products SET stock = $1 WHERE id = $2 AND deleted=false`
 	_, err = config.DB.Exec(updateQuery, stockUpdate.Stock, stockUpdate.ProductID)
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to update product stock"})
