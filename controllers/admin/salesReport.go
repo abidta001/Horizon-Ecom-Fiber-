@@ -149,6 +149,7 @@ func generateSalesReportPDF(report models.SalesReport) error {
 	pdf.Cell(25, 10, "Total")
 	pdf.Ln(6)
 
+	// Group data by product and display only unique products
 	for _, item := range report.Items {
 		pdf.SetFont("Arial", "", 10)
 		pdf.Cell(20, 10, fmt.Sprintf("%d", item.ProductID))
