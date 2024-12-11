@@ -41,25 +41,20 @@ func fetchSalesData(startDate, endDate time.Time) ([]models.SalesItem, int, floa
 	var totalRevenue float64
 	var totalDiscount float64
 
+	addedProducts := make(map[int]bool)
+
 	for rows.Next() {
 		var item models.SalesItem
 		if err := rows.StructScan(&item); err != nil {
 			return nil, 0, 0, 0, err
 		}
 
-		alreadyExists := false
-		for _, existingItem := range items {
-			if existingItem.ProductID == item.ProductID {
-				alreadyExists = true
-				break
-			}
-		}
-
-		if !alreadyExists {
+		if _, exists := addedProducts[item.ProductID]; !exists {
 			totalSalesCount += item.TotalQuantity
 			totalRevenue += item.TotalRevenue
 			totalDiscount += item.TotalOfferDiscount + item.TotalCouponDiscount
 			items = append(items, item)
+			addedProducts[item.ProductID] = true
 		}
 	}
 
@@ -157,7 +152,6 @@ func generateSalesReportPDF(report models.SalesReport) error {
 	pdf.Cell(25, 10, "Total")
 	pdf.Ln(6)
 
-	// Group data by product and display only unique products
 	for _, item := range report.Items {
 		pdf.SetFont("Arial", "", 10)
 		pdf.Cell(20, 10, fmt.Sprintf("%d", item.ProductID))
