@@ -14,22 +14,22 @@ import (
 
 func fetchSalesData(startDate, endDate time.Time) ([]models.SalesItem, int, float64, float64, error) {
 	query := `
-		SELECT 
-			p.id AS product_id,
-			p.name AS product_name,
-			p.description AS product_description,
-			SUM(oi.quantity) AS total_quantity,
-			SUM(oi.subtotal) AS total_amount,
-			SUM(o.offer_discount) AS total_offer_discount,
-			SUM(o.coupon_discount) AS total_coupon_discount,
-			SUM(oi.subtotal - o.offer_discount - o.coupon_discount) AS total_revenue
-		FROM order_items oi
-		JOIN orders o ON oi.order_id = o.id
-		JOIN products p ON oi.product_id = p.id
-		WHERE o.order_date BETWEEN $1 AND $2
-		  AND o.status IN ('Delivered', 'Returned', 'Canceled')
-		GROUP BY p.id, p.name, p.description
-	`
+        SELECT 
+            p.id AS product_id,
+            p.name AS product_name,
+            p.description AS product_description,
+            SUM(oi.quantity) AS total_quantity,
+            SUM(oi.subtotal) AS total_amount,
+            SUM(o.offer_discount) AS total_offer_discount,
+            SUM(o.coupon_discount) AS total_coupon_discount,
+            SUM(oi.subtotal - o.offer_discount - o.coupon_discount) AS total_revenue
+        FROM order_items oi
+        JOIN orders o ON oi.order_id = o.id
+        JOIN products p ON oi.product_id = p.id
+        WHERE o.order_date BETWEEN $1 AND $2
+          AND o.status IN ('Delivered', 'Returned', 'Canceled')
+        GROUP BY p.id, p.name, p.description
+    `
 	rows, err := config.DB.Queryx(query, startDate, endDate)
 	if err != nil {
 		return nil, 0, 0, 0, err
@@ -47,16 +47,24 @@ func fetchSalesData(startDate, endDate time.Time) ([]models.SalesItem, int, floa
 			return nil, 0, 0, 0, err
 		}
 
-		totalSalesCount += item.TotalQuantity
-		totalRevenue += item.TotalRevenue
-		totalDiscount += item.TotalOfferDiscount + item.TotalCouponDiscount
+		alreadyExists := false
+		for _, existingItem := range items {
+			if existingItem.ProductID == item.ProductID {
+				alreadyExists = true
+				break
+			}
+		}
 
-		items = append(items, item)
+		if !alreadyExists {
+			totalSalesCount += item.TotalQuantity
+			totalRevenue += item.TotalRevenue
+			totalDiscount += item.TotalOfferDiscount + item.TotalCouponDiscount
+			items = append(items, item)
+		}
 	}
 
 	return items, totalSalesCount, totalRevenue, totalDiscount, nil
 }
-
 func GenerateSalesReport(c *fiber.Ctx) error {
 	timeFilter := c.Query("timeFilter")
 	fileType := c.Query("fileType")
