@@ -143,7 +143,7 @@ func generateSalesReportPDF(report models.SalesReport) error {
 	pdf.Ln(10)
 
 	pdf.SetFont("Arial", "B", 10)
-	pdf.Cell(20, 10, "Item No")
+	pdf.Cell(20, 10, "Product ID")
 	pdf.Cell(50, 10, "Item Name")
 	pdf.Cell(25, 10, "Quantity")
 	pdf.Cell(25, 10, "Amount")
