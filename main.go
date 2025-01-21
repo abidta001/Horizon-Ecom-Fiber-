@@ -1,51 +1,56 @@
 package main
 
 import (
-	"fmt"
-	"net/http"
-
-	"github.com/joho/godotenv"
-
-	"horizon/config"
-
-	"horizon/routes"
 	"log"
 	"os"
 
+	"horizon/config"
+	"horizon/routes"
+
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/cors"
+	"github.com/joho/godotenv"
 )
 
 func main() {
+	// Load environment variables
 	if err := godotenv.Load(); err != nil {
 		log.Fatalf("Error loading .env file: %v", err)
 	}
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 
-		// Handle preflight request
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-
-		// Example response
-		fmt.Fprintf(w, "CORS enabled for all origins!")
-
-	})
-
+	// Initialize the database
 	config.InitDB()
 
+	// Create a new Fiber app
 	app := fiber.New()
 
+	// Apply CORS middleware globally to all routes
+	app.Use(cors.New(cors.Config{
+		AllowOrigins: "*", // Allow all origins
+		AllowMethods: "GET,POST,PUT,DELETE,OPTIONS",
+		AllowHeaders: "Content-Type,Authorization",
+	}))
+
+	// Add a product-specific route (example)
+	app.Get("/products", func(c *fiber.Ctx) error {
+		return c.JSON(fiber.Map{
+			"message": "CORS enabled for all products!",
+		})
+	})
+
+	// Initialize routes for users and admins
 	routes.UserRoutes(app)
 	routes.AdminRoutes(app)
+
+	// Initialize Google OAuth
 	config.InitGoogleOAuth()
 
+	// Get the port from the environment or use default 8080
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
 	}
+
+	// Start the Fiber app
 	log.Fatal(app.Listen(":" + port))
 }
