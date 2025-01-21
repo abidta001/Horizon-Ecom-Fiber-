@@ -31,13 +31,6 @@ func main() {
 		AllowHeaders: "Content-Type,Authorization",
 	}))
 
-	// Add a product-specific route (example)
-	app.Get("/products", func(c *fiber.Ctx) error {
-		return c.JSON(fiber.Map{
-			"message": "CORS enabled for all products!",
-		})
-	})
-
 	// Initialize routes for users and admins
 	routes.UserRoutes(app)
 	routes.AdminRoutes(app)
