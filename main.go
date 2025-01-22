@@ -21,6 +21,8 @@ func main() {
 	config.InitDB()
 
 	app := fiber.New()
+
+	app.Static("/assets", "./portfolio/assets")
 	app.Get("/", func(c *fiber.Ctx) error {
 		return c.SendFile("./portfolio/index.html")
 	})
