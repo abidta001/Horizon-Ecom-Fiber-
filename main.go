@@ -13,37 +13,33 @@ import (
 )
 
 func main() {
-	// Load environment variables
+
 	if err := godotenv.Load(); err != nil {
 		log.Fatalf("Error loading .env file: %v", err)
 	}
 
-	// Initialize the database
 	config.InitDB()
 
-	// Create a new Fiber app
 	app := fiber.New()
+	app.Get("/", func(c *fiber.Ctx) error {
+		return c.SendFile("./portfolio/index.html")
+	})
 
-	// Apply CORS middleware globally to all routes
 	app.Use(cors.New(cors.Config{
-		AllowOrigins: "*", // Allow all origins
+		AllowOrigins: "*",
 		AllowMethods: "GET,POST,PUT,DELETE,OPTIONS",
 		AllowHeaders: "Content-Type,Authorization",
 	}))
 
-	// Initialize routes for users and admins
 	routes.UserRoutes(app)
 	routes.AdminRoutes(app)
 
-	// Initialize Google OAuth
 	config.InitGoogleOAuth()
 
-	// Get the port from the environment or use default 8080
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
 	}
 
-	// Start the Fiber app
 	log.Fatal(app.Listen(":" + port))
 }
